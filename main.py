@@ -8,6 +8,7 @@ archivo_demanda_recursos = "demanda_recursos.xlsx"
 archivo_donaciones = "donaciones.xlsx"
 archivo_distancias = "distancia_ciudades.xlsx"
 archivo_personal_medico = "personal_medico.xlsx"
+archivo_centros = "centros.xlsx"
 
 # Se crean los conjuntos que representan los subíndices de los parámetros y variables del modelo
 C = pd.ExcelFile(archivo_demanda_recursos).sheet_names  # Conjunto de ciudades
@@ -22,28 +23,63 @@ M = range(1, 4 + 1)  # Conjunto de tipos de médicos
 
 # Se crean diccionarios para almacenar los datos de los archivos excel, la llave de cada
 # diccionario es una tupla con los subíndices correspondientes a cada parámetro
-e = {}  # Demanda de recursos
+e = {}  # Demanda de recursos de los heridos
 g = {}  # Donaciones de recursos
 i = {}  # Capacidad de acopio de ciudades
 d = {}  # Distancia ciudades
-c = {}  # Costo servicio de tipos de médicos
+q = {}  # Capacidad del centro de atención médica r
+qm = {}  # Capacidad de personal médico del centro de atención r
+c = {}  # Costo diario de servicio por cada personal médico de tipo m
+qh = {}  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
 
 # Usando pandas se leen los datos de los distintos archivos excel que corresponden a 
 # los parámetros del modelo y se almacenan en sus diccionarios respectivos
-df = pd.read_excel(archivo_demanda_recursos, index_col=0)
-for p in df.columns:
-    for j in df.index:
-        e[p,j] = df.loc[p,j] # La hoja j en la fila t y la columna i
 
-C = pd.ExcelFile(archivo_donaciones).sheet_names
-for i in C:
-    df = pd.read_excel(archivo_donaciones, sheet_name=j)
-    df.index += 1 # Para que los índices de las filas empiecen en 1 y no en 0 y calcen con los de la lista dias
-    for j in df.columns:
-        for t in df.index:
-            g[i,j,t] = df.loc[t,i] # La hoja j en la fila t y la columna i
+# definicion de e
+df = pd.read_excel(archivo_demanda_recursos)
+for j in df.index:
+    e[j] = df.loc[j, 3]  # Demanda de recurso j
 
-# Repetir para el resto de parámetros
+# definicion de g
+names_T = pd.ExcelFile(archivo_donaciones).sheet_names  # Conjunto de días
+for t in names_T:
+    if t != 'Totales':
+        df = pd.read_excel(archivo_donaciones, sheet_name=t)
+        for c in df.index[:-1]:  # Ciudades (filas)
+            for j in df.columns[2:]:  # Recursos (columnas)
+                # Asignamos el valor al diccionario g[j,t,c]
+                g[j, t, c] = df.loc[c, j]  # Para que los índices de las filas empiecen en 1 y no en 0 y calcen con los de la lista dias
+        
+# definicion de i
+df = pd.read_excel(archivo_centros, sheet_name="centros acopio")
+for c in df.index[:-1]:
+    i[c] = df.loc[c, 2]  # Capacidad del centro de acopio de la ciudad c
+
+# definicion de d
+df = pd.read_excel(archivo_distancias)
+for c in df.index[:-2]:
+    i[c] = df.loc[c, 1]  # Distancia desde la ciudad c hasta Valparaíso 
+
+# definicion de q
+df = pd.read_excel(archivo_centros, sheet_name="centros medicos")
+for r in df.index:
+    q[r] = df.loc[r, 1]  # Capacidad del centro de atención médica r
+
+# definicion de qm
+df = pd.read_excel(archivo_personal_medico)
+for r in df.index:
+    qm[r] = df.loc[r, 2]  # Capacidad de personal médico del centro de atención r
+
+# definicion de c
+df = pd.read_excel(archivo_personal_medico)
+for m in df.index:
+    c[m] = df.loc[m, 3]  # Costo de servicio del personal de tipo m por día
+
+# definicion de qh
+df = pd.read_excel(archivo_personal_medico)
+for m in df.index:
+    qh[m] = df.loc[m, 1]  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
+
 
 # Se instancia el modelo
 modelo = Model()
@@ -85,7 +121,6 @@ D = modelo.addVars(C, J, T, vtype=GRB.CONTINUOUS, name="D", lb=0)
 modelo.update()
 
 # Se definen las restricciones del modelo (descripciones disponibles en el informe adjunto)
-
 modelo.addConstr(qsum(c[m] * N[m,r,t] for m in M for r in R for t in T) +
                   qsum(cd * d[c] * Y[c,t] for c in C for t in T) <= b, name = "R1")
 
@@ -100,9 +135,9 @@ for j in J:
         if t == 1:
             modelo.addConstr(X[j,t] == 1, name = "R5")
         else:
-            modelo.addConstr(X[j,t] == qsum(U[j,t-1,c] for c in C) + X[j,t-1] + qsum(A[p,j,r,t-1] * e[p,j] for p in P for r in R), name = "R5")
+            modelo.addConstr(X[j,t] == qsum(U[j,t-1,c] for c in C) + X[j,t-1] + e[j] * qsum(A[p,j,r,t-1] for p in P for r in R), name = "R5")
 
-modelo.addConstrs((qsum(A[p,j,r,t] * e[p,j] for p in P for r in R) <= X[j,t] for j in J for t in J), name = "R6")
+modelo.addConstrs((e[j] * qsum(A[p,j,r,t] for p in P for r in R) <= X[j,t] for j in J for t in J), name = "R6")
 
 for j in J:
     for c in C:
@@ -120,7 +155,7 @@ modelo.addConstrs((qsum(U[j,t,c] for j in J) <= k * Y[c,t] for c in C for t in T
 
 modelo.addConstr(qsum(B[p,r,t] for p in P for r in R for t in T) <= h, name = "R11")
 
-modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * q[m] for m in M) for r in R for t in T), name = "R12")
+modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * qh[m] for m in M) for r in R for t in T), name = "R12")
 
 modelo.addConstrs((qsum(N[m,r,t] for m in M) <= q[r] for r in R for t in T), name = "R13")
 

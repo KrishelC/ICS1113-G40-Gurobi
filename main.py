@@ -7,6 +7,7 @@ from datos.parametros_unicos import h, b, v, k, cd
 archivo_demanda_recursos = "demanda_recursos.xlsx"
 archivo_donaciones = "donaciones.xlsx"
 archivo_distancias = "distancia_ciudades.xlsx"
+archivo_personal_medico = "personal_medico.xlsx"
 
 # Se crean los conjuntos que representan los subíndices de los parámetros y variables del modelo
 C = pd.ExcelFile(archivo_demanda_recursos).sheet_names  # Conjunto de ciudades

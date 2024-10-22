@@ -3,6 +3,6 @@
 
 h = 600  # Número de heridos totales al inicio de la emergencia, en Valparaíso
 b = None  # Presupuesto total disponible
-v = None  # Capacidad de almacenamiento de Valparaíso (kg)
+v = 6540  # Capacidad de almacenamiento de Valparaíso (kg)
 k = 10000  # Capacidad camion mediano (kg)
 cd = 500  # Costo por km recorrido por un camión (clp)

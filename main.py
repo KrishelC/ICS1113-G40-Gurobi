@@ -2,13 +2,14 @@ import pandas as pd
 from gurobipy import Model, GRB
 from gurobipy import quicksum as qsum
 from datos.parametros_unicos import h, b, v, k, cd
+from os import path
 
 # Archivos excel con los datos de los parámetros del modelo
-archivo_demanda_recursos = "demanda_recursos.xlsx"
-archivo_donaciones = "donaciones.xlsx"
-archivo_distancias = "distancia_ciudades.xlsx"
-archivo_personal_medico = "personal_medico.xlsx"
-archivo_centros = "centros.xlsx"
+archivo_demanda_recursos = path.join("datos", "demanda_recursos.xlsx")
+archivo_donaciones = path.join("datos", "donaciones.xlsx")
+archivo_distancias = path.join("datos", "distancia_ciudades.xlsx")
+archivo_personal_medico = path.join("datos", "personal_medico.xlsx")
+archivo_centros = path.join("datos", "centros.xlsx")
 
 # Se crean los conjuntos que representan los subíndices de los parámetros y variables del modelo
 T = pd.ExcelFile(archivo_donaciones).sheet_names  # Conjunto de días
@@ -27,7 +28,7 @@ d = {}  # Distancia ciudades
 q = {}  # Capacidad del centro de atención médica r
 qm = {}  # Capacidad de personal médico del centro de atención r
 qh = {}  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
-c = {}  # Costo diario de servicio por cada personal médico de tipo m
+cs = {}  # Costo diario de servicio por cada personal médico de tipo m
 
 # Usando pandas se leen los datos de los distintos archivos excel que corresponden a 
 # los parámetros del modelo y se almacenan en sus diccionarios respectivos
@@ -35,7 +36,7 @@ c = {}  # Costo diario de servicio por cada personal médico de tipo m
 # definicion de e
 df = pd.read_excel(archivo_demanda_recursos)
 for j in df.index:
-    e[j] = df.loc[j, 3]  # Demanda de recurso j
+    e[j] = df.iloc[j, 3]  # Demanda de recurso j
 
 # definicion de g
 for t in T:
@@ -49,32 +50,32 @@ for t in T:
 # definicion de i
 df = pd.read_excel(archivo_centros, sheet_name="centros acopio")
 for c in df.index[:-1]:
-    i[c] = df.loc[c, 2]  # Capacidad del centro de acopio de la ciudad c
+    i[c] = df.iloc[c, 2]  # Capacidad del centro de acopio de la ciudad c
 
 # definicion de d
 df = pd.read_excel(archivo_distancias)
 for c in df.index[:-2]:
-    i[c] = df.loc[c, 1]  # Distancia desde la ciudad c hasta Valparaíso
+    d[c] = df.iloc[c, 1]  # Distancia desde la ciudad c hasta Valparaíso
 
 # definicion de q
 df = pd.read_excel(archivo_centros, sheet_name="centros medicos")
 for r in df.index:
-    q[r] = df.loc[r, 1]  # Capacidad del centro de atención médica r
+    q[r] = df.iloc[r, 1]  # Capacidad del centro de atención médica r
 
 # definicion de qm
 df = pd.read_excel(archivo_centros, sheet_name="centros medicos")
 for r in df.index:
-    qm[r] = df.loc[r, 2]  # Capacidad de personal médico del centro de atención r
+    qm[r] = df.iloc[r, 2]  # Capacidad de personal médico del centro de atención r
 
 # definicion de qh
 df = pd.read_excel(archivo_personal_medico)
 for m in df.index:
-    qh[m] = df.loc[m, 1]  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
+    qh[m] = df.iloc[m, 1]  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
 
 # definicion de c
 df = pd.read_excel(archivo_personal_medico)
 for m in df.index:
-    c[m] = df.loc[m, 3]  # Costo de servicio del personal de tipo m por día
+    cs[m] = df.iloc[m, 3]  # Costo de servicio del personal de tipo m por día
 
 
 # Se instancia el modelo
@@ -117,7 +118,7 @@ D = modelo.addVars(C, J, T, vtype=GRB.CONTINUOUS, name="D", lb=0)
 modelo.update()
 
 # Se definen las restricciones del modelo (descripciones disponibles en el informe adjunto)
-modelo.addConstr(qsum(c[m] * N[m,r,t] for m in M for r in R for t in T) +
+modelo.addConstr(qsum(cs[m] * N[m,r,t] for m in M for r in R for t in T) +
                  qsum(cd * d[c] * Y[c,t] for c in C for t in T) <= b, name = "R1")
 
 modelo.addConstrs((B[p,r,t] <= (R[p,r,t] + qsum(A[p,j,r,t] for j in J)) / (1 + len(J)) for p in P for r in R for t in T), name = "R2")

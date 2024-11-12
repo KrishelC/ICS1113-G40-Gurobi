@@ -4,6 +4,7 @@ from gurobipy import quicksum as qsum
 from datos.parametros_unicos import h, b, v, k, cd
 from os import path
 import time
+import unicodedata
 
 # Se guarda el tiempo de inicio de la ejecución
 start_time = time.time()
@@ -180,13 +181,32 @@ modelo.setObjective(qsum(B[p,r,t] for p in P for r in R for t in T), GRB.MAXIMIZ
 # Se optimiza el modelo
 modelo.optimize()
 
-# Se escriben los resultados del modelo en un archivo de Excel: "resultados.xlsx"
-var_names = []
-var_values = []
-for var in m.getVars():
-    if var.varName.startswith("X") and var.x > 0:
-        var_names.append(str(var.varName))
-        var_values.append(var.x)
+# Se instancia la función objetivo y se optimiza el problema
+print("-"*10 + "Manejo de las soluciones" + "-"*10)
 
-df = pd.DataFrame({"Nombre": var_names, "Valor": var_values})
-df.to_excel("Resultados.xlsx", index = False)        
+# Se imprime el valor objetivo
+print(f"El valor objetivo es de: {modelo.ObjVal}")
+
+# Se imprimen los valores de las variables de decisión
+for var in modelo.getVars():
+    nombre_normalizado = unicodedata.normalize('NFKD', var.varName).encode('ascii', 'ignore').decode('ascii')
+    print(f"{nombre_normalizado} = {var.X}")
+
+# Se escriben los resultados del modelo en un archivo de Excel: "resultados.xlsx"
+variable_data = []
+
+# Recorrer las variables y obtener el nombre y valor
+for var in modelo.getVars():
+    variable_data.append([var.varName, var.X])
+
+# Crear un DataFrame con dos columnas: 'Variable' y 'Valor'
+df = pd.DataFrame(variable_data, columns=['Variable', 'Valor'])
+
+# Agregar una fila con el valor objetivo
+valor_objetivo = modelo.ObjVal  # Obtener el valor objetivo
+df = df._append({'Variable': 'Valor Objetivo', 'Valor': valor_objetivo}, ignore_index=True)
+
+# Guardar el DataFrame en un archivo Excel
+df.to_excel('resultados.xlsx', index=False, engine='openpyxl')
+
+print("Datos exportados exitosamente a 'resultados.xlsx'.")

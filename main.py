@@ -21,8 +21,8 @@ T = [sheet for sheet in pd.ExcelFile(archivo_donaciones).sheet_names if sheet !=
 J = pd.read_excel(archivo_donaciones, sheet_name=T[0]).columns[2:]  # Conjunto de recursos
 C = pd.read_excel(archivo_donaciones, sheet_name=T[0]).iloc[1:-1, 0]  # Conjunto de ciudades
 P = range(1, h + 1)  # Conjunto de heridos
-R = range(1, 4 + 1)  # Conjunto de centros médicos
-M = range(1, 3 + 1)  # Conjunto de tipos de médicos
+R = pd.read_excel(archivo_centros, sheet_name="centros medicos").set_index("Centro médico").index  # Conjunto de centros médicos
+M = pd.read_excel(archivo_personal_medico).set_index("Personal médico").index  # Conjunto de tipos de médicos
 
 # Se crean diccionarios para almacenar los datos de los archivos excel, la llave de cada
 # diccionario es una tupla con los subíndices correspondientes a cada parámetro
@@ -69,25 +69,24 @@ for index in df.index[:-2]:
     d[ciudad] = distancia  # Usa el nombre de la ciudad como clave
 
 # definicion de q
-df = pd.read_excel(archivo_centros, sheet_name="centros medicos")
+df = pd.read_excel(archivo_centros, sheet_name="centros medicos").set_index("Centro médico")
 for r in df.index:
-    q[r] = df.iloc[r, 1]  # Capacidad del centro de atención médica r
+    q[r] = df.iloc[df.index.get_loc(r), 0]  # Capacidad del centro de atención médica r
 
 # definicion de qm
-df = pd.read_excel(archivo_centros, sheet_name="centros medicos")
+df = pd.read_excel(archivo_centros, sheet_name="centros medicos").set_index("Centro médico")
 for r in df.index:
-    qm[r] = df.iloc[r, 2]  # Capacidad de personal médico del centro de atención r
+    qm[r] = df.iloc[df.index.get_loc(r), 1]  # Capacidad de personal médico del centro de atención r
 
 # definicion de qh
-df = pd.read_excel(archivo_personal_medico)
+df = pd.read_excel(archivo_personal_medico).set_index("Personal médico")
 for m in df.index:
-    qh[m] = df.iloc[m, 1]  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
+    qh[m] = df.iloc[df.index.get_loc(m), 0]  # Cantidad de heridos que el personal médico de tipo m puede atender por día.
 
 # definicion de cs
-df = pd.read_excel(archivo_personal_medico)
+df = pd.read_excel(archivo_personal_medico).set_index("Personal médico")
 for m in df.index:
-    cs[m] = df.iloc[m, 3]  # Costo de servicio del personal de tipo m por día
-
+    cs[m] = df.iloc[df.index.get_loc(m), 2]  # Costo de servicio del personal de tipo m por día
 
 # Se instancia el modelo
 modelo = Model()
@@ -190,7 +189,7 @@ print(f"El valor objetivo es de: {modelo.ObjVal}")
 # Se imprimen los valores de las variables de decisión
 for var in modelo.getVars():
     nombre_normalizado = unicodedata.normalize('NFKD', var.varName).encode('ascii', 'ignore').decode('ascii')
-    print(f"{nombre_normalizado} = {var.X}")
+    # print(f"{nombre_normalizado} = {var.X}")
 
 # Se escriben los resultados del modelo en un archivo de Excel: "resultados.xlsx"
 variable_data = []

@@ -40,17 +40,16 @@ cs = {}  # Costo diario de servicio por cada personal médico de tipo m
 df = pd.read_excel(archivo_demanda_recursos)
 for j in df.index:
     # Obtener el nombre del recurso desde la columna correspondiente (por ejemplo, columna 0)
-    resource_name = df.iloc[j, 0]  # Cambia el índice según la columna de los nombres de los recursos
-    e[resource_name] = df.iloc[j, 3]  # Demanda de recurso j
+    nombre_recurso = df.iloc[j, 0]  # Cambia el índice según la columna de los nombres de los recursos
+    e[nombre_recurso] = df.iloc[j, 3]  # Demanda de recurso j
 
 # definicion de g
 for t in T:
     df = pd.read_excel(archivo_donaciones, sheet_name=t)
     for c in df.index[:-1]:  # Ciudades (filas)
-        city_name = df.iloc[c, 0]  # Cambia el índice según la columna de los nombres de las ciudades
+        nombre_ciudad = df.iloc[c, 0]  # Cambia el índice según la columna de los nombres de las ciudades
         for j in df.columns[2:]:  # Recursos (columnas)
-            # Asignamos el valor al diccionario g[j,t,c]
-            g[j, t, city_name] = df.loc[c, j]  # Usar city_name en lugar de c
+            g[j, t, nombre_ciudad] = df.loc[c, j]
 
 # definicion de d
 df = pd.read_excel(archivo_distancias)

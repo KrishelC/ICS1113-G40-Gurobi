@@ -4,7 +4,6 @@ from gurobipy import quicksum as qsum
 from datos.parametros_unicos import h, b, v, k, cd
 from os import path
 import time
-import unicodedata
 
 # Se guarda el tiempo de inicio de la ejecución
 start_time = time.time()
@@ -28,7 +27,6 @@ M = pd.read_excel(archivo_personal_medico).set_index("Personal médico").index  
 # diccionario es una tupla con los subíndices correspondientes a cada parámetro
 e = {}  # Demanda de recursos de los heridos
 g = {}  # Donaciones de recursos
-i = {}  # Capacidad de acopio de ciudades
 d = {}  # Distancia ciudades
 q = {}  # Capacidad del centro de atención médica r
 qm = {}  # Capacidad de personal médico del centro de atención r
@@ -53,13 +51,6 @@ for t in T:
         for j in df.columns[2:]:  # Recursos (columnas)
             # Asignamos el valor al diccionario g[j,t,c]
             g[j, t, city_name] = df.loc[c, j]  # Usar city_name en lugar de c
-
-
-# definicion de i
-df = pd.read_excel(archivo_centros, sheet_name="centros acopio")
-for c in df.index[:-1]:
-    city_name = df.iloc[c, 0]  # Cambia el índice según la columna de los nombres de las ciudades
-    i[city_name] = df.iloc[c, 2]  # Capacidad del centro de acopio de la ciudad c
 
 # definicion de d
 df = pd.read_excel(archivo_distancias)
@@ -121,9 +112,6 @@ Rc = modelo.addVars(P, R, T, vtype=GRB.BINARY, name="R")
 # Variable binaria que indica si se cumplió la demanda del insumo médico j del herido p en el centro de atención médica r en el tiempo t
 A = modelo.addVars(P, J, R, T, vtype=GRB.BINARY, name="A")
 
-# Cantidad del recurso j desechada en la ciudad c en el tiempo t
-D = modelo.addVars(C, J, T, vtype=GRB.CONTINUOUS, name="D", lb=0)
-
 print(f"Tiempo para la creación de variables: {time.time() - start_time:.2f} segundos")
 
 # Se agregan las variables al modelo
@@ -158,21 +146,19 @@ for j in J:
                 modelo.addConstr(I[j,t,c] == g[j,t,c], name = "R7")
             else:
                 dia = T[T.index(t) - 1]
-                modelo.addConstr(I[j,t,c] == I[j,dia,c] + g[j,t,c] - U[j,t,c] - D[c,j,t], name = "R7")
+                modelo.addConstr(I[j,t,c] == I[j,dia,c] + g[j,t,c] - U[j,t,c], name = "R7")
 
-modelo.addConstrs((qsum(I[j,t,c] for j in J) <= i[c] for c in C for t in T), name = "R8")
+modelo.addConstrs((qsum(X[j,t] for j in J) <= v for t in T), name = "R8")
 
-modelo.addConstrs((qsum(X[j,t] for j in J) <= v for t in T), name = "R9")
+modelo.addConstrs((qsum(U[j,t,c] for j in J) <= k * Y[c,t] for c in C for t in T), name = "R9")
 
-modelo.addConstrs((qsum(U[j,t,c] for j in J) <= k * Y[c,t] for c in C for t in T), name = "R10")
+modelo.addConstr(qsum(B[p,r,t] for p in P for r in R for t in T) <= h, name = "R10")
 
-modelo.addConstr(qsum(B[p,r,t] for p in P for r in R for t in T) <= h, name = "R11")
+modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * qh[m] for m in M) for r in R for t in T), name = "R11")
 
-modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * qh[m] for m in M) for r in R for t in T), name = "R12")
+modelo.addConstrs((qsum(N[m,r,t] for m in M) <= qm[r] for r in R for t in T), name = "R12")
 
-modelo.addConstrs((qsum(N[m,r,t] for m in M) <= qm[r] for r in R for t in T), name = "R13")
-
-modelo.addConstrs((qsum(Rc[p,r,t] for p in P) <= q[r] for r in R for t in T), name = "R14")
+modelo.addConstrs((qsum(Rc[p,r,t] for p in P) <= q[r] for r in R for t in T), name = "R13")
 
 # Se define la función objetivo del modelo
 modelo.setObjective(qsum(B[p,r,t] for p in P for r in R for t in T), GRB.MAXIMIZE)
@@ -186,26 +172,63 @@ print("-"*10 + "Manejo de las soluciones" + "-"*10)
 # Se imprime el valor objetivo
 print(f"El valor objetivo es de: {modelo.ObjVal}")
 
-# Se imprimen los valores de las variables de decisión
-for var in modelo.getVars():
-    nombre_normalizado = unicodedata.normalize('NFKD', var.varName).encode('ascii', 'ignore').decode('ascii')
-    # print(f"{nombre_normalizado} = {var.X}")
 
-# Se escriben los resultados del modelo en un archivo de Excel: "resultados.xlsx"
-variable_data = []
+# Se crea una lista para almacenar los valores de todas las variables de decisión
+valores_variables = []
+# Se crean diccionarios para almacenar los valores de las variables de decisión de interés
+# para su posterior análisis
+variables_x = {}
+variables_b = {}
+variables_n = {}
 
 # Recorrer las variables y obtener el nombre y valor
 for var in modelo.getVars():
-    variable_data.append([var.varName, var.X])
+    nombre_var = var.varName
+    valor_var = var.X
+    valores_variables.append([nombre_var, valor_var])
 
-# Crear un DataFrame con dos columnas: 'Variable' y 'Valor'
-df = pd.DataFrame(variable_data, columns=['Variable', 'Valor'])
+# Se obtienen los valores de las variables de interés
+for t in T:
+    for j in J:
+        if j not in variables_x:
+            variables_x[j] = {}
+        variables_x[j][t] = X[j, t].X
 
-# Agregar una fila con el valor objetivo
-valor_objetivo = modelo.ObjVal  # Obtener el valor objetivo
+for t in T:
+    suma_atendidos = 0
+    for r in R:
+        for p in P:
+            if B[p, r, t].X == 1:
+                suma_atendidos += 1
+    variables_b[t] = suma_atendidos
+
+for m in M:
+    variables_n[m] = {}
+    for t in T:
+        # Suma los valores de N[m, r, t] para todos los r
+        variables_n[m][t] = sum(N[m, r, t].X for r in R)
+
+
+# Se crea un DataFrame general con dos columnas: 'Variable' y 'Valor', este incluye los valores
+# que toman todas las variables de decisión en el modelo
+df = pd.DataFrame(valores_variables, columns=['Variable', 'Valor'])
+# Se agrega una fila al final del excel con el valor objetivo
+valor_objetivo = modelo.ObjVal
 df = df._append({'Variable': 'Valor Objetivo', 'Valor': valor_objetivo}, ignore_index=True)
 
-# Guardar el DataFrame en un archivo Excel
+# Luego se resumen los resultados obtenidos de la variable X para cada recurso médico j en cada día t
+df_x = pd.DataFrame(variables_x)
+
+# Lo mismo para la variable B
+df_b = pd.Series(variables_b)
+
+# Lo mismo para la variable N
+df_n = pd.DataFrame(variables_n)
+
+# Se guardan los resultados en archivos Excel
+df_x.to_excel('resultados_X.xlsx', sheet_name='X_jt', engine='openpyxl')
+df_b.to_excel('resultados_B.xlsx', sheet_name='B_t', engine='openpyxl')
+df_n.to_excel('resultados_N.xlsx', sheet_name='N_mt', engine='openpyxl')
 df.to_excel('resultados.xlsx', index=False, engine='openpyxl')
 
-print("Datos exportados exitosamente a 'resultados.xlsx'.")
+print("Datos exportados exitosamente.")

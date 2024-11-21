@@ -122,42 +122,44 @@ modelo.update()
 modelo.addConstr(qsum(cs[m] * N[m,r,t] for m in M for r in R for t in T) +
                  qsum(cd * d[c] * Y[c,t] for c in C for t in T) <= b, name = "R1")
 
-modelo.addConstrs((B[p,r,t] <= (Rc[p,r,t] + qsum(A[p,j,r,t] for j in J)) / (1 + len(J)) for p in P for r in R for t in T), name = "R2")
+modelo.addConstrs((B[p,r,t] <= Rc[p,r,t] for p in P for r in R for t in T), name = "R2")
 
-modelo.addConstrs((qsum(B[p,r,t] for t in T) <= 1 for p in P for r in R), name = "R3")
+modelo.addConstrs((B[p,r,t] <= (qsum(A[p,j,r,t] for j in J) / len(J)) for p in P for r in R for t in T), name = "R3")
 
-modelo.addConstrs((qsum(Rc[p,r,t] for r in R) <= 1 for p in P for t in T), name = "R4")
+modelo.addConstrs((qsum(B[p,r,t] for t in T) <= 1 for p in P for r in R), name = "R4")
+
+modelo.addConstrs((qsum(Rc[p,r,t] for r in R) <= 1 for p in P for t in T), name = "R5")
 
 for j in J:
     for t in T:
         if t == "dia1":
-            modelo.addConstr(X[j,t] == 0, name = "R5")
+            modelo.addConstr(X[j,t] == 0, name = "R6")
         else:
             dia = T[T.index(t) - 1]
-            modelo.addConstr(X[j,t] == qsum(U[j,dia,c] for c in C) + X[j,dia] - e[j] * qsum(A[p,j,r,dia] for p in P for r in R), name = "R5")
+            modelo.addConstr(X[j,t] == qsum(U[j,dia,c] for c in C) + X[j,dia] - e[j] * qsum(A[p,j,r,dia] for p in P for r in R), name = "R6")
 
-modelo.addConstrs((e[j] * qsum(A[p,j,r,t] for p in P for r in R) <= X[j,t] for j in J for t in T), name = "R6")
+modelo.addConstrs((e[j] * qsum(A[p,j,r,t] for p in P for r in R) <= X[j,t] for j in J for t in T), name = "R7")
 
 for j in J:
     for c in C:
         for t in T:
             if t == "dia1":
-                modelo.addConstr(I[j,t,c] == g[j,t,c], name = "R7")
+                modelo.addConstr(I[j,t,c] == g[j,t,c], name = "R8")
             else:
                 dia = T[T.index(t) - 1]
-                modelo.addConstr(I[j,t,c] == I[j,dia,c] + g[j,t,c] - U[j,t,c], name = "R7")
+                modelo.addConstr(I[j,t,c] == I[j,dia,c] + g[j,t,c] - U[j,t,c], name = "R8")
 
-modelo.addConstrs((qsum(X[j,t] for j in J) <= v for t in T), name = "R8")
+modelo.addConstrs((qsum(X[j,t] for j in J) <= v for t in T), name = "R9")
 
-modelo.addConstrs((qsum(U[j,t,c] for j in J) <= k * Y[c,t] for c in C for t in T), name = "R9")
+modelo.addConstrs((qsum(U[j,t,c] for j in J) <= k * Y[c,t] for c in C for t in T), name = "R10")
 
-modelo.addConstr(qsum(B[p,r,t] for p in P for r in R for t in T) <= h, name = "R10")
+modelo.addConstr(qsum(B[p,r,t] for p in P for r in R for t in T) <= h, name = "R11")
 
-modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * qh[m] for m in M) for r in R for t in T), name = "R11")
+modelo.addConstrs((qsum(B[p,r,t] for p in P) <= qsum(N[m,r,t] * qh[m] for m in M) for r in R for t in T), name = "R12")
 
-modelo.addConstrs((qsum(N[m,r,t] for m in M) <= qm[r] for r in R for t in T), name = "R12")
+modelo.addConstrs((qsum(N[m,r,t] for m in M) <= qm[r] for r in R for t in T), name = "R13")
 
-modelo.addConstrs((qsum(Rc[p,r,t] for p in P) <= q[r] for r in R for t in T), name = "R13")
+modelo.addConstrs((qsum(Rc[p,r,t] for p in P) <= q[r] for r in R for t in T), name = "R14")
 
 # Se define la función objetivo del modelo
 modelo.setObjective(qsum(B[p,r,t] for p in P for r in R for t in T), GRB.MAXIMIZE)
@@ -179,6 +181,9 @@ valores_variables = []
 variables_x = {}
 variables_b = {}
 variables_n = {}
+variables_r = {}
+variables_a = {}
+variables_u = {}
 
 # Recorrer las variables y obtener el nombre y valor
 for var in modelo.getVars():
@@ -186,7 +191,7 @@ for var in modelo.getVars():
     valor_var = var.X
     valores_variables.append([nombre_var, valor_var])
 
-# Se obtienen los valores de las variables de interés
+# Se obtienen resumenes de las variables de interés y sus valores resultantes
 for t in T:
     for j in J:
         if j not in variables_x:
@@ -201,12 +206,44 @@ for t in T:
                 suma_atendidos += 1
     variables_b[t] = suma_atendidos
 
-for m in M:
-    variables_n[m] = {}
+
+for t in T:
+    variables_a[t] = 0
+    for r in R:
+        for p in P:
+            cant_recursos_atendidos = 0
+            for j in J:
+                cant_recursos_atendidos += A[p, j, r, t].X
+            if cant_recursos_atendidos == len(J):
+                variables_a[t] += 1
+
+for r in R:
+    variables_n[r] = {}
+    for t in T:
+        for m in M:
+            if m not in variables_n[r]:
+                variables_n[r][m] = {}
+            variables_n[r][m][t] = N[m, r, t].X
+
+for r in R:
+    variables_r[r] = {}
     for t in T:
         # Suma los valores de N[m, r, t] para todos los r
-        variables_n[m][t] = sum(N[m, r, t].X for r in R)
+        variables_r[r][t] = sum(Rc[p, r, t].X for p in P)
 
+for t in T:
+    for j in J:
+        if j not in variables_u:
+            variables_u[j] = {}
+        variables_u[j][t] = sum(U[j, t, c].X for c in C)
+
+costo_total = 0
+for t in T:
+    for m in M:
+        for r in R:
+            costo_total += cs[m] * N[m, r, t].x
+    for c in C:
+        costo_total += cd * d[c] * Y[c, t].x
 
 # Se crea un DataFrame general con dos columnas: 'Variable' y 'Valor', este incluye los valores
 # que toman todas las variables de decisión en el modelo
@@ -215,19 +252,28 @@ df = pd.DataFrame(valores_variables, columns=['Variable', 'Valor'])
 valor_objetivo = modelo.ObjVal
 df = df._append({'Variable': 'Valor Objetivo', 'Valor': valor_objetivo}, ignore_index=True)
 
-# Luego se resumen los resultados obtenidos de la variable X para cada recurso médico j en cada día t
+# Luego se resumen los resultados obtenidos de las variables de interés en DataFrames
 df_x = pd.DataFrame(variables_x)
-
-# Lo mismo para la variable B
 df_b = pd.Series(variables_b)
-
-# Lo mismo para la variable N
-df_n = pd.DataFrame(variables_n)
+df_r = pd.DataFrame(variables_r)
+df_a = pd.Series(variables_a)
+df_u = pd.DataFrame(variables_u)
 
 # Se guardan los resultados en archivos Excel
 df_x.to_excel('resultados_X.xlsx', sheet_name='X_jt', engine='openpyxl')
 df_b.to_excel('resultados_B.xlsx', sheet_name='B_t', engine='openpyxl')
-df_n.to_excel('resultados_N.xlsx', sheet_name='N_mt', engine='openpyxl')
+df_r.to_excel('resultados_R.xlsx', sheet_name='R_rt', engine='openpyxl')
+df_a.to_excel('resultados_A.xlsx', sheet_name='A_t', engine='openpyxl')
 df.to_excel('resultados.xlsx', index=False, engine='openpyxl')
+df_u.to_excel('resultados_U.xlsx', sheet_name='U_jt', engine='openpyxl')
+with pd.ExcelWriter("resultados_N.xlsx", engine="openpyxl") as writer:
+    for nombre_centro, data_dict in variables_n.items():
+        # Se convierte el diccionario en un DataFrame
+        df = pd.DataFrame(data_dict)
+        df.to_excel(writer, sheet_name=f"{nombre_centro}")
+
+# Se exporta el costo total a un archivo de texto
+with open("costo_total.txt", "w") as file:
+    file.write(f"Costo total: {costo_total}")
 
 print("Datos exportados exitosamente.")
